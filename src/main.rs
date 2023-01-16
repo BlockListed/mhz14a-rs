@@ -48,6 +48,10 @@ fn checksum(data: &[u8]) -> Result<(), ()> {
         },
         false => {
             eprintln!("Checksum failed! {:#x?}", data);
+            // Conditionally compiled, since this is only needs for tests,
+            // because they are run in parallel and otherwise it fucks up
+            // the output.
+            #[cfg(test)]
             std::io::stdout().flush().unwrap();
             Err(())
         }
