@@ -1,0 +1,33 @@
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo
+
+      - uses: action-rs/cargo@v1
+        with:
+          use-cross: true
+          command: build
+          args: --target armv7-unknown-linux-gnueabihf --release
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: mhz14a-rs-armv7a
+          path: target/armv7-unknown-linux-gnueabihf/release/mhz14a-rs
