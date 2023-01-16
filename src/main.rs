@@ -47,7 +47,8 @@ fn checksum(data: &[u8]) -> Result<(), ()> {
             Ok(())
         },
         false => {
-            eprintln!("Checksum failed! {:#?}", data);
+            eprintln!("Checksum failed! {:#x?}", data);
+            std::io::stdout().flush().unwrap();
             Err(())
         }
     } 
@@ -57,7 +58,8 @@ fn extract_data(data: &[u8]) -> u16 {
     assert_eq!(data.len(), 9);
 
     // `data[2]` are the upper 8 bits and `data[3]` are the lower 8 bits
-    ((data[2] as u16) << 8) + data[3] as u16
+    // The lower bits are ORed into the now empty first bits of the shifted number.
+    ((data[2] as u16) << 8) | data[3] as u16
 }
 
 #[cfg(test)]
@@ -66,14 +68,14 @@ mod test {
 
     #[test]
     fn test_checksum() {
-        let good_vectors: &[&[u8; 9]] = &[&[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79], &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x58]];
-        let bad_vectors: &[&[u8; 9]] = &[&[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x01, 0x00, 0x79], &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x69]];
+        let good_vectors: [&[u8; 9]; 2] = [&[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79], &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x58]];
+        let bad_vectors: [&[u8; 9]; 2] = [&[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x01, 0x00, 0x79], &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x69]];
 
         for i in good_vectors {
-            assert!(checksum(*i).is_ok());
+            assert!(checksum(i).is_ok());
         }
         for i in bad_vectors {
-            assert!(checksum(*i).is_err());
+            assert!(checksum(i).is_err());
         }
     }
 
