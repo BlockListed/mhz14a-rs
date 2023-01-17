@@ -68,7 +68,12 @@ fn extract_data(data: &[u8]) -> u16 {
 
 #[cfg(test)]
 mod test {
-    use crate::{checksum, extract_data};
+    use crate::{checksum, extract_data, GET_CONCENTRATION_REQUEST};
+
+    #[test]
+    fn test_request_payload() {
+        assert!(checksum(GET_CONCENTRATION_REQUEST).is_ok())
+    }
 
     #[test]
     fn test_checksum() {
