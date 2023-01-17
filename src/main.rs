@@ -2,10 +2,10 @@ use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 
-use serial::SerialPort;
+use pico_args::Arguments;
 use serial::open;
 use serial::PortSettings;
-use pico_args::Arguments;
+use serial::SerialPort;
 
 // UART command to send to get concentration!
 const GET_CONCENTRATION_REQUEST: &[u8; 9] = &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79];
@@ -28,24 +28,35 @@ fn main() {
     let mut port = open(&serial_path).expect("Couldn't open Port");
     port.configure(&settings).expect("Couldn't configure Port.");
 
-    assert_eq!(port.write(GET_CONCENTRATION_REQUEST).expect("Couldn't send request!"), 9);
+    assert_eq!(
+        port.write(GET_CONCENTRATION_REQUEST)
+            .expect("Couldn't send request!"),
+        9
+    );
 
     let response_buf = &mut [0u8; 9];
-    port.read_exact(response_buf).expect("Couldn't receive response!");
+    port.read_exact(response_buf)
+        .expect("Couldn't receive response!");
 
     checksum(response_buf).unwrap();
 
     println!("{}", extract_data(response_buf));
 }
 
-fn checksum(data: &[u8; 9]) -> Result<(), ()> {
+// Python: (0xff - ((b1 + b2 + b3 + b4 + b5 + b6 + b7) % (1<<8))) + 1
+// Module 1<<8 since python isn't using an 8bit wide type capable of overflowing.
+fn checksum<'a>(data: &[u8; 9]) -> Result<u8, u8> {
     assert_eq!(data.len(), 9);
-    let chksum: u8 = ( 0xff - (data[1..7].iter().sum::<u8>()) ) + 1;
+    let chksum: u8 = (0xff
+        - (data[1..7]
+            .iter()
+            .map(|x| *x)
+            .reduce(|acc, x| acc.overflowing_add(x).0)
+            .unwrap()))
+        + 1;
 
     match data[8] == chksum {
-        true => {
-            Ok(())
-        },
+        true => Ok(chksum),
         false => {
             eprintln!("Checksum failed! {:#x?}", data);
             // Conditionally compiled, since this is only needs for tests,
@@ -53,9 +64,9 @@ fn checksum(data: &[u8; 9]) -> Result<(), ()> {
             // the output.
             #[cfg(test)]
             std::io::stdout().flush().unwrap();
-            Err(())
+            Err(chksum)
         }
-    } 
+    }
 }
 
 fn extract_data(data: &[u8]) -> u16 {
@@ -77,14 +88,35 @@ mod test {
 
     #[test]
     fn test_checksum() {
-        let good_vectors: [&[u8; 9]; 2] = [&[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79], &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x58]];
-        let bad_vectors: [&[u8; 9]; 2] = [&[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x01, 0x00, 0x79], &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x69]];
+        // First vector is command sent from computer to sensor.
+        // Second vector is command sent from sensor to computer.
+        // Third command is from sensor to computer and designed to check what happens in the event of an overflow.
+        let good_vectors: [&[u8; 9]; 3] = [
+            &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79],
+            &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x58],
+            &[0xff, 0x86, 0x01, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x7b],
+        ];
+        let bad_vectors: [&[u8; 9]; 3] = [
+            &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x01, 0x00, 0x79],
+            &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x69],
+            &[0xff, 0x86, 0x01, 0xfd, 0x00, 0x00, 0x00, 0x00, 0x7b],
+        ];
 
         for i in good_vectors {
-            assert!(checksum(i).is_ok());
+            match checksum(i) {
+                Ok(_) => (),
+                Err(x) => {
+                    panic!("Should be GOOD {}", x);
+                }
+            }
         }
         for i in bad_vectors {
-            assert!(checksum(i).is_err());
+            match checksum(i) {
+                Ok(x) => {
+                    panic!("Should be BAD! {}", x);
+                }
+                Err(_) => (),
+            }
         }
     }
 
