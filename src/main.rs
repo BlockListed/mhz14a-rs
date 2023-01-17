@@ -30,15 +30,15 @@ fn main() {
 
     assert_eq!(port.write(GET_CONCENTRATION_REQUEST).expect("Couldn't send request!"), 9);
 
-    let mut response_buf = [0u8; 9];
-    port.read_exact(&mut response_buf).expect("Couldn't receive response!");
+    let response_buf = &mut [0u8; 9];
+    port.read_exact(response_buf).expect("Couldn't receive response!");
 
-    checksum(response_buf.as_slice()).unwrap();
+    checksum(response_buf).unwrap();
 
-    println!("{}", extract_data(response_buf.as_slice()));
+    println!("{}", extract_data(response_buf));
 }
 
-fn checksum(data: &[u8]) -> Result<(), ()> {
+fn checksum(data: &[u8; 9]) -> Result<(), ()> {
     assert_eq!(data.len(), 9);
     let chksum: u8 = ( 0xff - (data[1..7].iter().sum::<u8>()) ) + 1;
 
