@@ -45,7 +45,7 @@ fn main() {
 
 // Python: (0xff - ((b1 + b2 + b3 + b4 + b5 + b6 + b7) % (1<<8))) + 1
 // Module 1<<8 since python isn't using an 8bit wide type capable of overflowing.
-fn checksum<'a>(data: &[u8; 9]) -> Result<u8, u8> {
+fn checksum(data: &[u8; 9]) -> Result<u8, u8> {
     assert_eq!(data.len(), 9);
     let chksum: u8 = (0xff
         - (data[1..7]
