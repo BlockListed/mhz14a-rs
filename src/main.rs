@@ -51,6 +51,7 @@ fn checksum(data: &[u8; 9]) -> Result<u8, u8> {
         - (data[1..7]
             .iter()
             .map(|x| *x)
+            // Sum values together
             .reduce(|acc, x| acc.overflowing_add(x).0)
             .unwrap()))
         .overflowing_add(1).0;
@@ -88,32 +89,35 @@ mod test {
 
     #[test]
     fn test_checksum() {
-        // First vector is command sent from computer to sensor.
-        // Second vector is command sent from sensor to computer.
-        // Third command is from sensor to computer and designed to check what happens in the event of an overflow.
-        let good_vectors: [&[u8; 9]; 3] = [
+        // First vector is from computer to sensor.
+        // Second vector is from sensor to computer.
+        // Third vector is from sensor to computer and is designed to check if the sum correctly overflows.
+        // Fourth vector is from sensor to computer and is designed to check what happens if the final +1 correctly overflows.
+        let good_vectors: [&[u8; 9]; 4] = [
             &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79],
             &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x58],
             &[0xff, 0x86, 0x01, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x7b],
+            &[0xff, 0x86, 0x01, 0x79, 0x00, 0x00, 0x00, 0x00, 0x00],
         ];
-        let bad_vectors: [&[u8; 9]; 3] = [
+        let bad_vectors: [&[u8; 9]; 4] = [
             &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x01, 0x00, 0x79],
             &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x69],
             &[0xff, 0x86, 0x01, 0xfd, 0x00, 0x00, 0x00, 0x00, 0x7b],
+            &[0xff, 0x86, 0x01, 0x78, 0x00, 0x00, 0x00, 0x00, 0x00],
         ];
 
         for i in good_vectors {
             match checksum(i) {
                 Ok(_) => (),
                 Err(x) => {
-                    panic!("Should be GOOD {}", x);
+                    panic!("Should be GOOD: {}", x);
                 }
             }
         }
         for i in bad_vectors {
             match checksum(i) {
                 Ok(x) => {
-                    panic!("Should be BAD! {}", x);
+                    panic!("Should be BAD!: {}", x);
                 }
                 Err(_) => (),
             }
