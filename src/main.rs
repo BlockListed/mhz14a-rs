@@ -53,7 +53,7 @@ fn checksum(data: &[u8; 9]) -> Result<u8, u8> {
             .map(|x| *x)
             .reduce(|acc, x| acc.overflowing_add(x).0)
             .unwrap()))
-        + 1;
+        .overflowing_add(1).0;
 
     match data[8] == chksum {
         true => Ok(chksum),
