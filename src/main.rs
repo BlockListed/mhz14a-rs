@@ -13,7 +13,7 @@ const GET_CONCENTRATION_REQUEST: &[u8; 9] = &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00
 fn main() {
     let mut args = Arguments::from_env();
 
-    let mut serial_path: PathBuf = PathBuf::from("/dev/ttys0");
+    let mut serial_path: PathBuf = PathBuf::from("/dev/ttyS0");
 
     if let Some(path) = args.opt_value_from_str::<&str, PathBuf>("--path").unwrap() {
         serial_path = path;
