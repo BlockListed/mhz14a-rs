@@ -4,6 +4,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      CARGO_REGISTRIES_CRATES-IO_PROTOCOL: sparse
+
     steps:
       - uses: actions/checkout@v3
 
