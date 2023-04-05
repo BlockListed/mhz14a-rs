@@ -1,5 +1,6 @@
 use std::io::Read;
 use std::io::Write;
+use std::num::Wrapping;
 use std::path::PathBuf;
 
 use pico_args::Arguments;
@@ -7,17 +8,35 @@ use serial::open;
 use serial::PortSettings;
 use serial::SerialPort;
 
+mod statements;
+
 // UART command to send to get concentration!
 const GET_CONCENTRATION_REQUEST: &[u8; 9] = &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79];
 
 fn main() {
     let mut args = Arguments::from_env();
 
+    if args.contains("--license") {
+        println!("{}", statements::LICENSE);
+        return
+    }
+
+    if args.contains("--version") {
+        println!("{}", statements::VERSION);
+        return
+    }
+
+    if args.contains("--help") {
+        println!("{}", statements::HELP);
+        return
+    }
+
     let mut serial_path: PathBuf = PathBuf::from("/dev/ttyS0");
 
     if let Some(path) = args.opt_value_from_str::<&str, PathBuf>("--path").unwrap() {
         serial_path = path;
     }
+    let ignore_checksum = args.contains("--ignore-checksum");
     let settings = PortSettings {
         baud_rate: serial::Baud9600,
         char_size: serial::Bits8,
@@ -38,23 +57,26 @@ fn main() {
     port.read_exact(response_buf)
         .expect("Couldn't receive response!");
 
-    checksum(response_buf).unwrap();
+    if !ignore_checksum {
+        checksum(response_buf).unwrap();
+    }
 
     println!("{}", extract_data(response_buf));
 }
 
-// Python: ((0xff - ((data[1:7]) % (1<<8))) + 1) % (1<<8))
+// Python: ((0xff - (sum(data[1:7]) % (1<<8))) + 1) % (1<<8))
 // Modulo 1<<8 since python isn't using an 8bit wide type capable of overflowing.
 fn checksum(data: &[u8; 9]) -> Result<u8, u8> {
     assert_eq!(data.len(), 9);
-    let chksum: u8 = (0xff
+    let chksum: u8 = ((Wrapping(0xff)
         - (data[1..7]
             .iter()
-            .map(|x| *x)
+            .map(|x| Wrapping(*x))
             // Sum values together
-            .reduce(|acc, x| acc.overflowing_add(x).0)
+            .reduce(|acc, x| acc + x)
             .unwrap()))
-        .overflowing_add(1).0;
+        + Wrapping(1))
+    .0;
 
     match data[8] == chksum {
         true => Ok(chksum),
@@ -92,7 +114,7 @@ mod test {
         // First vector is from computer to sensor.
         // Second vector is from sensor to computer.
         // Third vector is from sensor to computer and is designed to check if the sum correctly overflows.
-        // Fourth vector is from sensor to computer and is designed to check what happens if the final +1 correctly overflows.
+        // Fourth vector is from sensor to computer and is designed to check if the final +1 correctly overflows.
         let good_vectors: [&[u8; 9]; 4] = [
             &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79],
             &[0xff, 0x86, 0x02, 0x20, 0x00, 0x00, 0x00, 0x00, 0x58],
