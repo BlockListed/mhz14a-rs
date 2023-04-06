@@ -3,6 +3,9 @@ use std::io::Write;
 use std::num::Wrapping;
 use std::path::PathBuf;
 
+use log::error;
+
+use log::warn;
 use pico_args::Arguments;
 use serial::open;
 use serial::PortSettings;
@@ -14,21 +17,23 @@ mod statements;
 const GET_CONCENTRATION_REQUEST: &[u8; 9] = &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79];
 
 fn main() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+
     let mut args = Arguments::from_env();
 
     if args.contains("--license") {
         println!("{}", statements::LICENSE);
-        return
+        return;
     }
 
     if args.contains("--version") {
         println!("{}", statements::VERSION);
-        return
+        return;
     }
 
     if args.contains("--help") {
         println!("{}", statements::HELP);
-        return
+        return;
     }
 
     let mut serial_path: PathBuf = PathBuf::from("/dev/ttyS0");
@@ -48,14 +53,19 @@ fn main() {
     port.configure(&settings).expect("Couldn't configure Port.");
 
     port.write_all(GET_CONCENTRATION_REQUEST)
-            .expect("Couldn't send request!");
+        .expect("Couldn't send request!");
 
     let response_buf = &mut [0u8; 9];
     port.read_exact(response_buf)
         .expect("Couldn't receive response!");
 
-    if !ignore_checksum {
-        checksum(response_buf).unwrap();
+    if let Err(e) = checksum(response_buf) {
+        if !ignore_checksum {
+            error!("Invalid checksum: {:#x}!", e);
+        } else {
+            warn!("Ignored invalid checksum: {:#x}!", e);
+        }
+        return;
     }
 
     println!("{}", extract_data(response_buf));
