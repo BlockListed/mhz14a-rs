@@ -47,11 +47,8 @@ fn main() {
     let mut port = open(&serial_path).expect("Couldn't open Port");
     port.configure(&settings).expect("Couldn't configure Port.");
 
-    assert_eq!(
-        port.write(GET_CONCENTRATION_REQUEST)
-            .expect("Couldn't send request!"),
-        9
-    );
+    port.write_all(GET_CONCENTRATION_REQUEST)
+            .expect("Couldn't send request!");
 
     let response_buf = &mut [0u8; 9];
     port.read_exact(response_buf)
