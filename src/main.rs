@@ -38,7 +38,7 @@ fn main() {
 
     let mut serial_path: PathBuf = PathBuf::from("/dev/ttyS0");
 
-    if let Some(path) = args.opt_value_from_str::<&str, PathBuf>("--path").unwrap() {
+    if let Some(path) = args.opt_value_from_str::<_, PathBuf>("--path").unwrap() {
         serial_path = path;
     }
     let ignore_checksum = args.contains("--ignore-checksum");
@@ -59,7 +59,7 @@ fn main() {
     port.read_exact(response_buf)
         .expect("Couldn't receive response!");
 
-    if let Err(e) = checksum(response_buf) {
+    if let Err(e) = verify_checksum(response_buf) {
         if !ignore_checksum {
             error!("Invalid checksum: {:#x}!", e);
         } else {
@@ -73,8 +73,7 @@ fn main() {
 
 // Python: ((0xff - (sum(data[1:7]) % (1<<8))) + 1) % (1<<8))
 // Modulo 1<<8 since python isn't using an 8bit wide type capable of overflowing.
-fn checksum(data: &[u8; 9]) -> Result<u8, u8> {
-    assert_eq!(data.len(), 9);
+fn checksum(data: &[u8; 9]) -> u8 {
     let chksum: u8 = ((Wrapping(0xff)
         - (data[1..7]
             .iter()
@@ -85,23 +84,26 @@ fn checksum(data: &[u8; 9]) -> Result<u8, u8> {
         + Wrapping(1))
     .0;
 
-    match data[8] == chksum {
-        true => Ok(chksum),
-        false => {
-            eprintln!("Checksum failed! {:#x?}", data);
-            // Conditionally compiled, since this is only needs for tests,
-            // because they are run in parallel and otherwise it fucks up
-            // the output.
-            #[cfg(test)]
-            std::io::stdout().flush().unwrap();
-            Err(chksum)
-        }
+    chksum
+}
+
+fn verify_checksum(data: &[u8; 9]) -> Result<u8, u8> {
+    let expected_chk = extract_checksum(data);
+    let chk = checksum(data);
+
+    if expected_chk == chk {
+        Ok(chk)
+    } else {
+        Err(chk)
     }
 }
 
-fn extract_data(data: &[u8]) -> u16 {
-    assert_eq!(data.len(), 9);
+fn extract_checksum(data: &[u8; 9]) -> u8 {
+    // Checksum is always the last byte.
+    *data.last().unwrap()
+}
 
+fn extract_data(data: &[u8; 9]) -> u16 {
     // `data[2]` are the upper 8 bits and `data[3]` are the lower 8 bits
     // The lower bits are ORed into the now empty first bits of the shifted number.
     ((data[2] as u16) << 8) | data[3] as u16
@@ -109,11 +111,11 @@ fn extract_data(data: &[u8]) -> u16 {
 
 #[cfg(test)]
 mod test {
-    use crate::{checksum, extract_data, GET_CONCENTRATION_REQUEST};
+    use crate::{extract_data, GET_CONCENTRATION_REQUEST, verify_checksum};
 
     #[test]
     fn test_request_payload() {
-        assert!(checksum(GET_CONCENTRATION_REQUEST).is_ok())
+        assert!(verify_checksum(GET_CONCENTRATION_REQUEST).is_ok())
     }
 
     #[test]
@@ -136,19 +138,13 @@ mod test {
         ];
 
         for i in good_vectors {
-            match checksum(i) {
-                Ok(_) => (),
-                Err(x) => {
-                    panic!("Should be GOOD: {}", x);
-                }
+            if let Err(e) = verify_checksum(i) {
+                    panic!("Should be GOOD: {:#?}", e);
             }
         }
         for i in bad_vectors {
-            match checksum(i) {
-                Ok(x) => {
-                    panic!("Should be BAD!: {}", x);
-                }
-                Err(_) => (),
+            if let Ok(e) = verify_checksum(i) {
+                panic!("Should be BAD!: {:#?}", e);
             }
         }
     }
