@@ -1,4 +1,4 @@
-pub const HELP: &str = r#"mhz14a-rs [--version] [--license] [--ignore-checksum]    
+pub const HELP: &str = r#"mhz14a-rs [--help] [--version] [--license] [--ignore-checksum]    
     mhz14a-rs - Read data from the mhz14a co2 sensor.
     
     --version - Show version information.
