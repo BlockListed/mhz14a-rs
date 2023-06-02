@@ -14,7 +14,7 @@ use serial::SerialPort;
 mod statements;
 
 // UART command to send to get concentration!
-const GET_CONCENTRATION_REQUEST: &[u8; 9] = &[0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79];
+const GET_CONCENTRATION_REQUEST: [u8; 9] = [0xff, 0x01, 0x86, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79];
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
@@ -52,7 +52,7 @@ fn main() {
     let mut port = open(&serial_path).expect("Couldn't open Port");
     port.configure(&settings).expect("Couldn't configure Port.");
 
-    port.write_all(GET_CONCENTRATION_REQUEST)
+    port.write_all(&GET_CONCENTRATION_REQUEST)
         .expect("Couldn't send request!");
 
     let response_buf = &mut [0u8; 9];
@@ -60,12 +60,12 @@ fn main() {
         .expect("Couldn't receive response!");
 
     if let Err(e) = verify_checksum(response_buf) {
-        if !ignore_checksum {
-            error!("Invalid checksum: {:#x}!", e);
-        } else {
+        if ignore_checksum {
             warn!("Ignored invalid checksum: {:#x}!", e);
+        } else {
+            error!("Invalid checksum: {:#x}!", e);
+            return;
         }
-        return;
     }
 
     println!("{}", extract_data(response_buf));
@@ -77,7 +77,8 @@ fn checksum(data: &[u8; 9]) -> u8 {
     let chksum: u8 = ((Wrapping(0xff)
         - (data[1..7]
             .iter()
-            .map(|x| Wrapping(*x))
+            .copied()
+            .map(Wrapping)
             // Sum values together
             .reduce(|acc, x| acc + x)
             .unwrap()))
@@ -106,16 +107,16 @@ fn extract_checksum(data: &[u8; 9]) -> u8 {
 fn extract_data(data: &[u8; 9]) -> u16 {
     // `data[2]` are the upper 8 bits and `data[3]` are the lower 8 bits
     // The lower bits are ORed into the now empty first bits of the shifted number.
-    ((data[2] as u16) << 8) | data[3] as u16
+    ((u16::from(data[2])) << 8) | u16::from(data[3])
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{extract_data, GET_CONCENTRATION_REQUEST, verify_checksum};
+    use crate::{extract_data, verify_checksum, GET_CONCENTRATION_REQUEST};
 
     #[test]
     fn test_request_payload() {
-        assert!(verify_checksum(GET_CONCENTRATION_REQUEST).is_ok())
+        assert!(verify_checksum(&GET_CONCENTRATION_REQUEST).is_ok())
     }
 
     #[test]
@@ -139,7 +140,7 @@ mod test {
 
         for i in good_vectors {
             if let Err(e) = verify_checksum(i) {
-                    panic!("Should be GOOD: {:#?}", e);
+                panic!("Should be GOOD: {:#?}", e);
             }
         }
         for i in bad_vectors {
